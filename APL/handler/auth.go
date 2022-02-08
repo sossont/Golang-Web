@@ -29,6 +29,12 @@ var user = models.Users{
 var ACCESS_SECRET = viper.GetString(`token.ACCESS_SECRET`)
 
 func Login(c *gin.Context) {
+	user := new(models.Users)
+	if err := c.Bind(user); err != nil {
+		c.JSON(http.StatusBadRequest, "Bad Request")
+		return
+	}
+
 	// DB 연결
 	db := db.Connect()
 	sqlDB, err := db.DB()
@@ -37,26 +43,23 @@ func Login(c *gin.Context) {
 	}
 	defer sqlDB.Close()
 
-	var mockUser models.Users
+	inputPassword := user.Password
+	result := db.Find(&user, "username=?", user.Username)
 
-	if err := c.ShouldBindJSON(&mockUser); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, "JSON이 잘못 되었습니다.")
+	// username 존재하지 않는 경우.
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusBadRequest, "존재하지 않는 유저 아이디 입니다.")
 		return
 	}
 
-	if user.Username != mockUser.Username || user.Password != mockUser.Password {
-		c.JSON(http.StatusUnauthorized, "유저 정보가 틀렸습니다.")
+	checkHash := helper.CheckPasswordHash(user.Password, inputPassword)
+	if checkHash == false {
+		c.JSON(http.StatusBadRequest, "비밀번호가 틀렸습니다.")
 		return
 	}
 
-	token, err := CreateToken(user.ID)
-
-	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, err.Error())
-		return
-	}
-
-	c.JSON(http.StatusOK, token)
+	c.JSON(http.StatusOK, "로그인 성공")
+	return
 }
 
 func SignUp(c *gin.Context) {
@@ -65,6 +68,7 @@ func SignUp(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, "Bad Request")
 		return
 	}
+
 	db := db.Connect()
 	sqlDB, err := db.DB()
 	if err != nil {
