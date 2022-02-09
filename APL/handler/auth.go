@@ -4,20 +4,14 @@ import (
 	"Golang-Web/APL/db"
 	"Golang-Web/APL/helper"
 	"Golang-Web/APL/models"
-	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt"
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
+	"log"
 	"net/http"
 	"os"
-	"time"
 )
-
-type TokenDetails struct {
-	AccessToken  string
-	RefreshToken string
-	AtExpires    int64 // 엑세스 토큰 유효기간
-	RtExpires    int64 // Refresh Token
-}
 
 // 예시 유저.
 var user = models.Users{
@@ -27,40 +21,6 @@ var user = models.Users{
 }
 
 var ACCESS_SECRET = viper.GetString(`token.ACCESS_SECRET`)
-
-func Login(c *gin.Context) {
-	user := new(models.Users)
-	if err := c.Bind(user); err != nil {
-		c.JSON(http.StatusBadRequest, "Bad Request")
-		return
-	}
-
-	// DB 연결
-	db := db.Connect()
-	sqlDB, err := db.DB()
-	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, err.Error())
-	}
-	defer sqlDB.Close()
-
-	inputPassword := user.Password
-	result := db.Find(&user, "username=?", user.Username)
-
-	// username 존재하지 않는 경우.
-	if result.RowsAffected == 0 {
-		c.JSON(http.StatusBadRequest, "존재하지 않는 유저 아이디 입니다.")
-		return
-	}
-
-	checkHash := helper.CheckPasswordHash(user.Password, inputPassword)
-	if checkHash == false {
-		c.JSON(http.StatusBadRequest, "비밀번호가 틀렸습니다.")
-		return
-	}
-
-	c.JSON(http.StatusOK, "로그인 성공")
-	return
-}
 
 func SignUp(c *gin.Context) {
 	user := new(models.Users)
@@ -99,38 +59,168 @@ func SignUp(c *gin.Context) {
 	return
 }
 
-func CreateToken(userId uint64) (*TokenDetails, error) {
-	td := &TokenDetails{}
-	td.AtExpires = time.Now().Add(time.Minute * 15).Unix()
-	td.RtExpires = time.Now().Add(time.Hour * 24 * 7).Unix() // 7일
-	var err error
-	// Access Token 만들기
-	os.Setenv("ACCESS_SECRET", "jdnfksdmfksd")
-	// ENV 에 ACCESS_SECRET 에 담긴 값을 이용하여 JWT 서명
-
-	atClaims := jwt.MapClaims{}
-	atClaims["authorized"] = true
-	atClaims["userid"] = userId
-	atClaims["exp"] = td.AtExpires
-
-	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
-	td.AccessToken, err = at.SignedString([]byte(os.Getenv("ACCESS_SECRET")))
-	if err != nil {
-		return nil, err
-
+func Login(c *gin.Context) {
+	user := new(models.Users)
+	if err := c.Bind(user); err != nil {
+		c.JSON(http.StatusBadRequest, "Bad Request")
+		return
 	}
 
-	os.Setenv("REFRESH_TOKEN", "mcmvasdqwer")
-	rtClaims := jwt.MapClaims{}
-	rtClaims["userid"] = userId
-	rtClaims["exp"] = td.RtExpires
-	rt := jwt.NewWithClaims(jwt.SigningMethodHS256, rtClaims)
-	td.RefreshToken, err = rt.SignedString([]byte(os.Getenv("REFRESH_TOKEN")))
+	// DB 연결
+	db := db.Connect()
+	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, err
+		c.JSON(http.StatusUnprocessableEntity, err.Error())
+	}
+	defer sqlDB.Close()
+
+	inputPassword := user.Password
+	result := db.Find(&user, "username=?", user.Username)
+
+	// username 존재하지 않는 경우.
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusBadRequest, "존재하지 않는 유저 아이디 입니다.")
+		return
 	}
 
-	return td, nil
+	// 비밀번호가 틀린 경우
+	checkHash := helper.CheckPasswordHash(user.Password, inputPassword)
+	if checkHash == false {
+		c.JSON(http.StatusBadRequest, "비밀번호가 틀렸습니다.")
+		return
+	}
+
+	// 저 두가지 경우가 아니면 성공
+	td, err := helper.CreateToken(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, "JWT 토큰 생성 실패")
+	}
+
+	// 쿠키 저장.
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     "access-token",
+		Value:    td.AccessToken,
+		Expires:  td.AtExpires,
+		HttpOnly: true,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"Message":       "로그인 성공",
+		"Access token":  td.AccessToken,
+		"Refresh token": td.RefreshToken,
+	})
+
+	// 로그인 성공하면 Refresh Token 을 DB 에 저장.
+	db.Model(&user).Update("refresh_token", td.RefreshToken)
+	return
+}
+
+func VerifyAccessToken(c *gin.Context) {
+	if err := godotenv.Load(".env"); err != nil {
+		log.Fatal("파일 로딩 에러 (.env) ")
+	}
+	accessToken := c.GetHeader("access-token")
+	if accessToken == "" {
+		c.JSON(http.StatusUnauthorized, "엑세스 토큰이 없습니다.")
+		return
+	}
+
+	claims := jwt.MapClaims{}
+
+	// 토큰 decode. claims 에 복호화한 정보 저장.
+	_, err := jwt.ParseWithClaims(accessToken, &claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("ACCESS_SECRET")), nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, "토큰 인증 실패. 재발급 받으세요.")
+		return
+	}
+
+	c.JSON(http.StatusOK, "엑세스 토큰 인증 완료")
+	return
+}
+
+func RecreateToken(c *gin.Context) {
+	if err := godotenv.Load(".env"); err != nil {
+		log.Fatal("파일 로딩 에러 (.env) ")
+	}
+
+	at := c.GetHeader("access-token")
+	if at == "" {
+		c.JSON(http.StatusUnauthorized, "엑세스 토큰이 없습니다.")
+		return
+	}
+
+	claims := jwt.MapClaims{}
+
+	// 토큰 decode. claims 에 복호화한 정보 저장.
+	_, err := jwt.ParseWithClaims(at, &claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("ACCESS_SECRET")), nil
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, "토큰 인증 실패. 재발급 받으세요.")
+		return
+	}
+	userId := claims["userid"].(uint64)
+	accessToken, err := helper.CreateToken(userId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, "엑세스 토큰 재생성중 에러")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "토큰 재생성 완료",
+		"accessToken": accessToken,
+	})
+	return
+}
+func CheckToken(c *gin.Context) {
+	user := new(models.Users)
+	if err := godotenv.Load(".env"); err != nil {
+		log.Fatal("파일 로딩 에러 (.env) ")
+	}
+	// DB 연결
+	db := db.Connect()
+	sqlDB, err := db.DB()
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, err.Error())
+	}
+	defer sqlDB.Close()
+
+	// 헤더에서 갖고오는 코드 c.Request.Header.Get("Authorization")
+	accessToken := c.GetHeader("access-token")
+	if accessToken == "" {
+		c.JSON(http.StatusUnauthorized, "엑세스 토큰이 없습니다.")
+		return
+	}
+
+	claims := jwt.MapClaims{}
+
+	// 토큰 decode. claims 에 복호화한 정보 저장.
+	_, err = jwt.ParseWithClaims(accessToken, &claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("ACCESS_SECRET")), nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, "토큰 복호화 실패")
+		return
+	}
+
+	userId := claims["userid"]
+	result := db.Find(&user, "id=?", userId)
+	// userId 존재하지 않는 경우.
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusBadRequest, "존재하지 않는 유저입니다.")
+		return
+	}
+	refreshToken := user.RefreshToken
+	if refreshToken == "" {
+		c.JSON(http.StatusUnauthorized, "Refresh Token Error")
+		return
+	}
+	c.JSON(http.StatusOK, "토큰 검증 완료")
+	return
 }
 
 /*

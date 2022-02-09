@@ -16,12 +16,13 @@ func main() {
 
 	*/
 	r.GET("/", handler.Home)
-	r.POST("/insert", handler.Insert)
-	r.POST("/search", handler.Search)
-	r.POST("/insertEtcd", handler.InsertEtcd)
-	r.POST("/searchEtcd", handler.SearchEtcd)
-	r.POST("/signup", handler.SignUp)
-	r.POST("/login", handler.Login)
+	r.POST("/api/insert", handler.Insert)
+	r.POST("/api/search", handler.Search)
+	r.POST("/api/insertEtcd", handler.InsertEtcd)
+	r.POST("/api/searchEtcd", handler.SearchEtcd)
+	r.POST("/api/signup", handler.SignUp)
+	r.POST("/api/login", handler.Login)
+	r.GET("/api/check", handler.CheckToken)
 	r.Run(":8080")
 
 }
