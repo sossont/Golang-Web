@@ -11,6 +11,20 @@ type Data struct {
 	Temp     float32 `json:"temperature"`
 }
 
+// MerkleReq Requests For Make Merkle Tree
+type MerkleReq struct {
+	PrevId        string `json:"prevId"`
+	PrevTradeDate string `json:"prevDatetime"`
+	Id            string `json:"id"`
+	TradeDate     string `json:"Datetime"`
+	ImgVector1    string `json:"ImgVector1"`
+	ImgVector2    string `json:"ImgVector2"`
+}
+
+type VerifyMerkleReq struct {
+	Value string `json:"value"`
+}
+
 /*
 type targets struct {
 	Coldchain []Coldchain `json:"target"`

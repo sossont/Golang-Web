@@ -22,6 +22,7 @@ func main() {
 	r.POST("/api/searchEtcd", handler.SearchEtcd)
 	r.POST("/api/signup", handler.SignUp)
 	r.POST("/api/login", handler.Login)
+	r.POST("/api/createMerkle", handler.CreateMerkle)
 	r.GET("/api/check", handler.CheckToken)
 	r.Run(":8080")
 
