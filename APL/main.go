@@ -2,11 +2,11 @@ package main
 
 import (
 	"Golang-Web/APL/handler"
+	"Golang-Web/APL/middleware"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-
 	r := gin.Default()
 	/*
 		r.GET("/", Home)
@@ -23,7 +23,8 @@ func main() {
 	r.POST("/api/signup", handler.SignUp)
 	r.POST("/api/login", handler.Login)
 	r.POST("/api/createMerkle", handler.CreateMerkle)
-	r.GET("/api/check", handler.CheckToken)
+	r.POST("/api/logout", middleware.TokenAuthMiddleware(), handler.Logout)
+	r.POST("/api/refresh", handler.Refresh)
 	r.Run(":8080")
 
 }

@@ -9,12 +9,11 @@ import (
 )
 
 func Connect() *gorm.DB {
-	if err := godotenv.Load(".env"); err != nil {
-		log.Fatal("파일 로딩 에러 (.env) ")
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("파일 로딩 에러 (.env) From db_connect.go")
 	}
-
-	USER := os.Getenv("DBUSER")
-	PASS := os.Getenv("DBPASSWORD")
+	USER := os.Getenv("DB_USER")
+	PASS := os.Getenv("DB_PASSWORD")
 	PROTOCOL := "tcp(localhost:3306)" // 로컬 환경은 로컬호스트의 3306 포트
 	DBNAME := os.Getenv("DBNAME")
 	CONNECT := USER + ":" + PASS + "@" + PROTOCOL + "/" + DBNAME +
