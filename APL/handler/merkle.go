@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"github.com/cbergoon/merkletree"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"log"
 	"net/http"
+	"os"
 )
 
 var dict = map[string]string{} // 메모리 저장소.
@@ -43,6 +45,12 @@ func CreateMerkle(c *gin.Context) {
 		return
 	}
 
+	_, exists := dict[id]
+	if exists {
+		c.JSON(http.StatusBadRequest, "이미 존재하는 작품입니다.")
+		return
+	}
+
 	list := createContent(request)
 
 	mt, err := merkletree.NewTree(list)
@@ -66,23 +74,48 @@ func CreateMerkle(c *gin.Context) {
 	*/
 
 	// 암호화 하는 부분.
-	privateKey := helper.GeneratePk()
-	ret := helper.EncryptPk(hashStr, privateKey)
-	log.Println("암호화된 문장 : ", ret)
-	decRet := helper.DecryptPk(ret, privateKey)
-	log.Println("복호화된 문장 : ", decRet)
-
-	_, exists := dict[id]
-	if !exists { // 존재하지 않는 경우
-		dict[id] = ret
-	} else {
-		c.JSON(http.StatusBadRequest, "이미 존재하는 작품입니다.")
-		return
+	// privateKey := helper.GeneratePk()
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("파일 로딩 에러 (.env) ")
 	}
+	label := []byte(os.Getenv("LABEL"))
+
+	privateKeyFile, err := os.Open("/Users/hwanu/Desktop/Hongik/APL/keypair/private_key.pem")
+	if err != nil {
+		log.Fatal("File Open Error")
+	}
+	privateKeyPem, err := helper.ImportPEM(privateKeyFile)
+	if err != nil {
+		log.Fatal("Import PEM Error")
+	}
+	privateKeyFile.Close()
+
+	// import public_key.pem
+	publicKeyFile, err := os.Open("/Users/hwanu/Desktop/Hongik/APL/keypair/public_key.pem")
+	if err != nil {
+		log.Fatal("File Open Error")
+	}
+	publicKeyPem, err := helper.ImportPEM(publicKeyFile)
+	if err != nil {
+		log.Fatal("Import PEM Error")
+	}
+	publicKeyFile.Close()
+
+	// EnCrypt and DeCrypt
+	privateKey := helper.PEMtoPrivateKey(privateKeyPem.Bytes) // 소유자 개인키
+	publicKey := helper.PEMtoPublicKey(publicKeyPem.Bytes)    // 소유자 공개키
+
+	cipherText := helper.Encrypt(hashStr, publicKey, label)    // 소유자 공개키로 암호화한 암호문
+	plainText := helper.Decrypt(cipherText, privateKey, label) // 소유자 개인키로 복호화한 평문
+
+	log.Println("암호화된 문장 : ", cipherText)
+	log.Println("복호화된 문장 : ", plainText)
+
+	dict[id] = cipherText // 소유자 공개키로 암호화된 암호문 저장
 
 	c.JSON(http.StatusOK, gin.H{
 		"Message":    "머클 트리 생성 완료",
-		"암호화 된 루트 값": ret,
+		"암호화 된 루트 값": cipherText,
 	})
 	return
 }

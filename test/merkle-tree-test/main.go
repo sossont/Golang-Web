@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"github.com/cbergoon/merkletree"
 	"log"
 )
@@ -33,11 +34,14 @@ func main() {
 	list = append(list, TestContent{x: "화누정"})
 
 	merkleTree, err := merkletree.NewTree(list)
+	log.Println(merkleTree.Leafs[0])
 	if err != nil {
 		log.Fatal(err)
 	} else {
 		merkleRoot := merkleTree.MerkleRoot()
 		log.Println("Merkel Root : ", merkleRoot)
+		// MerkleRoot 값을 해시 값으로 변환.
+		log.Println("Hash : ", hex.EncodeToString(merkleRoot))
 	}
 
 	verifyTree, err := merkleTree.VerifyTree()
@@ -55,8 +59,7 @@ func main() {
 		log.Println("Verify Content : ", tc, verifyContent)
 	}
 
-	log.Println(merkleTree)
-	path, idx, err := merkleTree.GetMerklePath(TestContent{x: "Hi"})
+	path, idx, err := merkleTree.GetMerklePath(TestContent{x: "Hello"})
 	if err != nil {
 		log.Fatal(err)
 	} else {
