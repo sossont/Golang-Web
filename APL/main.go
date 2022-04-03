@@ -24,7 +24,7 @@ func main() {
 	r.POST("/api/login", handler.Login)
 	r.POST("/api/createMerkle", handler.CreateMerkle)
 	r.POST("/api/logout", middleware.TokenAuthMiddleware(), handler.Logout)
-	r.POST("/api/refresh", handler.Refresh)
+	r.POST("/api/check", handler.Check)
 	r.Run(":8080")
 
 }

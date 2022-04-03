@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -27,28 +26,18 @@ func CreateToken(userId uint64) (*TokenDetails, error) {
 	}
 
 	td := &TokenDetails{}
-	td.AtExpires = time.Now().Add(time.Minute * 15).Unix()   // 15분
+	td.AtExpires = time.Now().Add(time.Minute * 1).Unix()    // 원래는 15분인데, 실험용으로 1분으로 설정.
 	td.RtExpires = time.Now().Add(time.Hour * 24 * 7).Unix() // 7일
 	var err error
 	// Access Token 만들기
 	// ENV 에 ACCESS_SECRET 에 담긴 값을 이용하여 JWT 서명
 
-	atClaims := jwt.MapClaims{}
-	atClaims["authorized"] = true
-	atClaims["userid"] = userId
-	atClaims["exp"] = td.AtExpires
-
-	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
-	td.AccessToken, err = at.SignedString([]byte(os.Getenv("ACCESS_SECRET")))
+	td.AccessToken, err = createAccessToken(userId, td, err)
 	if err != nil {
 		return nil, err
 	}
 
-	rtClaims := jwt.MapClaims{}
-	rtClaims["userid"] = userId
-	rtClaims["exp"] = td.RtExpires
-	rt := jwt.NewWithClaims(jwt.SigningMethodHS256, rtClaims)
-	td.RefreshToken, err = rt.SignedString([]byte(os.Getenv("REFRESH_SECRET")))
+	td.RefreshToken, err = createRefreshToken(userId, td, err)
 	if err != nil {
 		return nil, err
 	}
@@ -56,16 +45,37 @@ func CreateToken(userId uint64) (*TokenDetails, error) {
 	return td, nil
 }
 
+func createRefreshToken(userId uint64, td *TokenDetails, err error) (string, error) {
+	rtClaims := jwt.MapClaims{}
+	rtClaims["userid"] = userId
+	rtClaims["exp"] = td.RtExpires
+	rt := jwt.NewWithClaims(jwt.SigningMethodHS256, rtClaims)
+	return rt.SignedString([]byte(os.Getenv("REFRESH_SECRET")))
+}
+
+func createAccessToken(userId uint64, td *TokenDetails, err error) (string, error) {
+	atClaims := jwt.MapClaims{}
+	atClaims["authorized"] = true
+	atClaims["userid"] = userId
+	atClaims["exp"] = td.AtExpires
+	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
+	return at.SignedString([]byte(os.Getenv("ACCESS_SECRET")))
+}
+
 // ExtractToken 헤더에서 토큰 추출하는 함수.
 func ExtractToken(r *http.Request) string {
-	bearToken := r.Header.Get("access-token")
-	//normally Authorization the_token_xxx
-	log.Print(bearToken) // 그냥 로그용
-	strArr := strings.Split(bearToken, " ")
-	if len(strArr) == 2 {
-		return strArr[1]
+	// bearToken := r.Header.Get("access-token")
+	cookie, err := r.Cookie("access-token")
+	if err != nil {
+		return ""
 	}
-	return ""
+	Token := cookie.Value
+	//normally Authorization the_token_xxx
+	log.Print(Token) // 그냥 로그용
+	if len(Token) == 0 {
+		return ""
+	}
+	return Token
 }
 
 // VerifyAccessToken 토큰을 가져와서 Signing Method 검증.
@@ -74,11 +84,13 @@ func VerifyAccessToken(r *http.Request) (*jwt.Token, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		//Make sure that the token method conform to "SigningMethodHMAC"
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			log.Println("Verify Access Token 1번 에러")
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return []byte(os.Getenv("ACCESS_SECRET")), nil
 	})
 	if err != nil {
+		log.Println("Verify Access Token 2번 에러")
 		return nil, err
 	}
 	return token, nil
@@ -88,9 +100,12 @@ func VerifyAccessToken(r *http.Request) (*jwt.Token, error) {
 func AccessTokenValid(r *http.Request) error {
 	token, err := VerifyAccessToken(r)
 	if err != nil {
+		log.Println("Access Token Valid 1번 에러")
 		return err
 	}
 	if _, ok := token.Claims.(jwt.Claims); !ok && !token.Valid {
+		log.Println("Access Token Valid 2번 에러")
+
 		return err
 	}
 	return nil

@@ -18,11 +18,9 @@ func Connect() *gorm.DB {
 	DBNAME := os.Getenv("DBNAME")
 	CONNECT := USER + ":" + PASS + "@" + PROTOCOL + "/" + DBNAME +
 		"?charset=utf8mb4&parseTime=True&loc=Local"
-	print(CONNECT)
 	db, err := gorm.Open(mysql.Open(CONNECT), &gorm.Config{})
 	if err != nil {
 		panic(err.Error())
 	}
-
 	return db
 }

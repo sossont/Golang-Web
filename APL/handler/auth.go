@@ -4,14 +4,9 @@ import (
 	"Golang-Web/APL/db"
 	"Golang-Web/APL/helper"
 	"Golang-Web/APL/models"
-	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
-	"github.com/joho/godotenv"
 	"log"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 )
 
@@ -117,6 +112,22 @@ func Logout(c *gin.Context) {
 
 }
 
+// Check : Access Token 유효한지 확인하기 위한 API
+func Check(c *gin.Context) {
+	err := helper.AccessTokenValid(c.Request)
+	if err != nil {
+		log.Println("토큰 유효 에러")
+		c.JSON(
+			http.StatusBadRequest,
+			"Token 이 유효하지 않습니다.")
+		return
+	}
+	log.Println("토큰 유효함!")
+	c.JSON(http.StatusOK,
+		"Token 유효합니다.")
+}
+
+/*
 func Refresh(c *gin.Context) {
 	user := new(models.Users)
 	mapToken := map[string]string{}
@@ -160,6 +171,7 @@ func Refresh(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, err)
 		return
 	}
+
 	//Since token is valid, get the uuid:
 	claims, ok := token.Claims.(jwt.MapClaims) //the token claims should conform to MapClaims
 	if ok && token.Valid {
@@ -209,6 +221,7 @@ func Refresh(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, "refresh expired")
 	}
 }
+*/
 
 /*
 참고 자료 : https://learn.vonage.com/blog/2020/03/13/using-jwt-for-authentication-in-a-golang-application-dr/
