@@ -20,7 +20,7 @@ type TokenDetails struct {
 	RtExpires    int64 // Refresh Token 유효기간
 }
 
-func CreateToken(userId uint64) (*TokenDetails, error) {
+func CreateToken(userId string) (*TokenDetails, error) {
 	if err := godotenv.Load(".env"); err != nil {
 		log.Fatal("파일 로딩 에러 (.env) ")
 	}
@@ -32,12 +32,12 @@ func CreateToken(userId uint64) (*TokenDetails, error) {
 	// Access Token 만들기
 	// ENV 에 ACCESS_SECRET 에 담긴 값을 이용하여 JWT 서명
 
-	td.AccessToken, err = createAccessToken(userId, td, err)
+	td.AccessToken, err = CreateAccessToken(userId, td, err)
 	if err != nil {
 		return nil, err
 	}
 
-	td.RefreshToken, err = createRefreshToken(userId, td, err)
+	td.RefreshToken, err = CreateRefreshToken(userId, td, err)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func CreateToken(userId uint64) (*TokenDetails, error) {
 	return td, nil
 }
 
-func createRefreshToken(userId uint64, td *TokenDetails, err error) (string, error) {
+func CreateRefreshToken(userId string, td *TokenDetails, err error) (string, error) {
 	rtClaims := jwt.MapClaims{}
 	rtClaims["userid"] = userId
 	rtClaims["exp"] = td.RtExpires
@@ -53,7 +53,7 @@ func createRefreshToken(userId uint64, td *TokenDetails, err error) (string, err
 	return rt.SignedString([]byte(os.Getenv("REFRESH_SECRET")))
 }
 
-func createAccessToken(userId uint64, td *TokenDetails, err error) (string, error) {
+func CreateAccessToken(userId string, td *TokenDetails, err error) (string, error) {
 	atClaims := jwt.MapClaims{}
 	atClaims["authorized"] = true
 	atClaims["userid"] = userId
@@ -62,10 +62,23 @@ func createAccessToken(userId uint64, td *TokenDetails, err error) (string, erro
 	return at.SignedString([]byte(os.Getenv("ACCESS_SECRET")))
 }
 
-// ExtractToken 헤더에서 토큰 추출하는 함수.
-func ExtractToken(r *http.Request) string {
-	// bearToken := r.Header.Get("access-token")
+// ExtractAccessToken 헤더에서 토큰 추출하는 함수.
+func ExtractAccessToken(r *http.Request) string {
 	cookie, err := r.Cookie("access-token")
+	if err != nil {
+		return ""
+	}
+	Token := cookie.Value
+	//normally Authorization the_token_xxx
+	log.Print(Token) // 그냥 로그용
+	if len(Token) == 0 {
+		return ""
+	}
+	return Token
+}
+
+func ExtractRefreshToken(r *http.Request) string {
+	cookie, err := r.Cookie("refresh-token")
 	if err != nil {
 		return ""
 	}
@@ -80,7 +93,7 @@ func ExtractToken(r *http.Request) string {
 
 // VerifyAccessToken 토큰을 가져와서 Signing Method 검증.
 func VerifyAccessToken(r *http.Request) (*jwt.Token, error) {
-	tokenString := ExtractToken(r)
+	tokenString := ExtractAccessToken(r)
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		//Make sure that the token method conform to "SigningMethodHMAC"
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -109,6 +122,32 @@ func AccessTokenValid(r *http.Request) error {
 		return err
 	}
 	return nil
+}
+
+// RefreshAccessToken Access Token 유효하지 않을 때, Refresh Token 가져와서 유효하면 재발급
+func RefreshAccessToken(r *http.Request) (string, error) {
+	token := ExtractRefreshToken(r)
+	log.Println("Refresh Token : " + token)
+	// Refresh Token 이 유효하지 않은 경우
+	if token == "" {
+		return "", fmt.Errorf("재로그인 해야 합니다")
+	}
+
+	db := db.Connect()
+	sqlDB, err := db.DB()
+	if err != nil {
+		return "", fmt.Errorf("DB 연결 오류")
+	}
+	defer sqlDB.Close()
+
+	user := new(models.Users)
+	result := db.Find(&user, "refresh_token=?", token)
+	// refresh Token 유효하지 않은 경우
+	if result.RowsAffected == 0 {
+		return "", fmt.Errorf("재로그인 해야 합니다")
+	}
+
+	return user.UserId, nil
 }
 
 // CheckToken 어떤 작업 할때 마다 이 코드를 넣어줘야 한다.
