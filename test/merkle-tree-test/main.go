@@ -1,38 +1,68 @@
 package main
 
 import (
+	"Golang-Web/APL/models"
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/cbergoon/merkletree"
 	"log"
 )
 
-type TestContent struct {
-	x string
+type Content struct {
+	Id        string // 사용자 아이디
+	Percent   string // 지분
+	TradeDate string // 거래 날짜
+	ImgVector string
 }
 
-// CalculateHash TestContent 값의 Hash값 계산.
-func (t TestContent) CalculateHash() ([]byte, error) {
+func (c Content) CalculateHash() ([]byte, error) {
 	hash := sha256.New()
-	if _, err := hash.Write([]byte(t.x)); err != nil {
+	_, err := hash.Write([]byte(c.Id))
+	_, err = hash.Write([]byte(c.Percent))
+	_, err = hash.Write([]byte(c.TradeDate))
+	_, err = hash.Write([]byte(c.ImgVector))
+	if err != nil {
 		return nil, err
 	}
-
 	return hash.Sum(nil), nil
 }
 
-// Equals 두 값이 같은 지 테스트
-func (t TestContent) Equals(other merkletree.Content) (bool, error) {
-	return t.x == other.(TestContent).x, nil
+func (c Content) Equals(other merkletree.Content) (bool, error) {
+	return c.Id == other.(Content).Id && c.Percent == other.(Content).Percent && c.TradeDate == other.(Content).TradeDate && c.ImgVector == other.(Content).ImgVector, nil
 }
 
+// createContent 머클 트리에 들어갈 항목 리스트를 request 를 넘기면 자동으로 만들어서 반환.
+func createContent(requests []models.MerkleReq) []merkletree.Content {
+	var list []merkletree.Content
+	// 요청이 몇개 들어올 지 모르므로 배열로 만든다.
+	for _, request := range requests {
+		list = append(list, models.Content{
+			Id:        request.Id,
+			Percent:   request.Percent,
+			TradeDate: request.TradeDate,
+			ImgVector: request.ImgVector,
+		})
+	}
+	return list
+}
 func main() {
 	var list []merkletree.Content
-	list = append(list, TestContent{x: "Hello"})
-	list = append(list, TestContent{x: "Hi"})
-	list = append(list, TestContent{x: "Ex1"})
-	list = append(list, TestContent{x: "화누정"})
+	// 요청이 몇개 들어올 지 모르므로 배열로 만든다.
 
+	list = append(list, models.Content{
+		Id:        "5",
+		Percent:   "23.4",
+		TradeDate: "20220402",
+		ImgVector: "asdqwewqe1212512512321512",
+	})
+
+	list = append(list, models.Content{
+		Id:        "21",
+		Percent:   "23.4",
+		TradeDate: "20220402",
+		ImgVector: "asdqwewqe1212512512321512",
+	})
+	
 	merkleTree, err := merkletree.NewTree(list)
 	log.Println(merkleTree.Leafs[0])
 	if err != nil {
@@ -51,18 +81,4 @@ func main() {
 		log.Println("Verify Tree : ", verifyTree)
 	}
 
-	tc := TestContent{x: "Ex1"}
-	verifyContent, err := merkleTree.VerifyContent(tc)
-	if err != nil {
-		log.Fatal(err)
-	} else {
-		log.Println("Verify Content : ", tc, verifyContent)
-	}
-
-	path, idx, err := merkleTree.GetMerklePath(TestContent{x: "Hello"})
-	if err != nil {
-		log.Fatal(err)
-	} else {
-		log.Println("Merkle Path : ", path, idx)
-	}
 }

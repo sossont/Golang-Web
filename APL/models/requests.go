@@ -13,12 +13,10 @@ type Data struct {
 
 // MerkleReq Requests For Make Merkle Tree
 type MerkleReq struct {
-	PrevId        string `json:"prevId"`
-	PrevTradeDate string `json:"prevDatetime"`
-	Id            string `json:"id"`
-	TradeDate     string `json:"Datetime"`
-	ImgVector1    string `json:"ImgVector1"`
-	ImgVector2    string `json:"ImgVector2"`
+	Id        string `json:"id"`        // 사용자 아이디
+	Percent   string `json:"percent"`   // 지분
+	TradeDate string `json:"Datetime"`  // 거래 날짜
+	ImgVector string `json:"ImgVector"` // 이미지 벡터 값(이미지 아이디 값으로 바꿔도 될 듯)
 }
 
 type VerifyMerkleReq struct {

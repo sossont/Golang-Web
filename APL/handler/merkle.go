@@ -13,45 +13,54 @@ import (
 	"os"
 )
 
-var dict = map[string]string{} // 메모리 저장소.
+var memoryRepo = map[string]string{} // 메모리 저장소.
 
-// createContent 머클 트리에 들어갈 항목 8개를 request를 넘기면 자동으로 만들어서 반환.
-func createContent(request models.MerkleReq) []merkletree.Content {
+// createContent 머클 트리에 들어갈 항목 리스트를 request 를 넘기면 자동으로 만들어서 반환.
+func createContent(requests []models.MerkleReq) []merkletree.Content {
 	var list []merkletree.Content
-	list = append(list, models.Content{Value: request.PrevId})
-	list = append(list, models.Content{Value: request.PrevTradeDate})
-	list = append(list, models.Content{Value: request.ImgVector1})
-	list = append(list, models.Content{Value: request.ImgVector2})
-	list = append(list, models.Content{Value: request.Id})
-	list = append(list, models.Content{Value: request.TradeDate})
-	list = append(list, models.Content{Value: request.ImgVector1})
-	list = append(list, models.Content{Value: request.ImgVector2})
+	vector := requests[0].ImgVector
+	if vector == "" {
+		log.Println("Vector : ", vector)
+		return nil
+	}
+
+	if _, exists := memoryRepo[vector]; exists {
+		return nil
+	}
+
+	// 요청이 몇개 들어올 지 모르므로 배열로 만든다.
+	for _, request := range requests {
+
+		if request.ImgVector != vector {
+			log.Println("Vector : ", vector)
+
+			return nil
+		}
+
+		list = append(list, models.Content{
+			Id:        request.Id,
+			Percent:   request.Percent,
+			TradeDate: request.TradeDate,
+			ImgVector: request.ImgVector,
+		})
+	}
 	return list
 }
 
 func CreateMerkle(c *gin.Context) {
-	var request models.MerkleReq
+	var requests []models.MerkleReq
 
-	if err := c.BindJSON(&request); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, "머클 트리 Request 오류")
+	if err := c.BindJSON(&requests); err != nil {
+		c.JSON(http.StatusBadRequest, "머클 트리 Request 오류")
 		fmt.Println(err.Error())
 		return
 	}
 
-	id := c.Query("id")
-	// 작품 아이디가 안들어온 경우.
-	if id == "" {
-		c.JSON(http.StatusBadRequest, "작품 id가 필요합니다.")
+	list := createContent(requests)
+	if list == nil {
+		c.JSON(http.StatusBadRequest, "작품 벡터 오류입니다.")
 		return
 	}
-
-	_, exists := dict[id]
-	if exists {
-		c.JSON(http.StatusBadRequest, "이미 존재하는 작품입니다.")
-		return
-	}
-
-	list := createContent(request)
 
 	mt, err := merkletree.NewTree(list)
 	if err != nil {
@@ -76,6 +85,7 @@ func CreateMerkle(c *gin.Context) {
 	// 암호화 하는 부분.
 	// privateKey := helper.GeneratePk()
 	if err := godotenv.Load(); err != nil {
+		log.Println(err)
 		log.Fatal("파일 로딩 에러 (.env) ")
 	}
 	label := []byte(os.Getenv("LABEL"))
@@ -111,7 +121,7 @@ func CreateMerkle(c *gin.Context) {
 	log.Println("암호화된 문장 : ", cipherText)
 	log.Println("복호화된 문장 : ", plainText)
 
-	dict[id] = cipherText // 소유자 공개키로 암호화된 암호문 저장
+	memoryRepo[requests[0].ImgVector] = cipherText // 소유자 공개키로 암호화된 암호문 저장
 
 	c.JSON(http.StatusOK, gin.H{
 		"Message":    "머클 트리 생성 완료",
